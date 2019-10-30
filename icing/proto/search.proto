@@ -1,0 +1,103 @@
+// Copyright 2019 Google LLC
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//      http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+syntax = "proto2";
+
+package icing;
+
+import "icing/proto/document.proto";
+import "icing/proto/term.proto";
+
+// Client-supplied specifications on what documents to retrieve.
+// Next tag: 3
+message SearchSpecProto {
+  // REQUIRED: The "raw" query string that users may type. For example, "cat"
+  // will search for documents with the term cat in it.
+  optional string query = 1;
+
+  // Indicates how the query terms should match terms in the index.
+  //
+  // TermMatchType.Code=UNKNOWN
+  // Should never purposely be set and may lead to undefined behavior. This is
+  // used for backwards compatibility reasons.
+  //
+  // TermMatchType.Code=EXACT_ONLY
+  // Query terms will only match exact tokens in the index.
+  // Ex. A query term "foo" will only match indexed token "foo", and not "foot"
+  // or "football"
+  //
+  // TermMatchType.Code=PREFIX
+  // Query terms will match indexed tokens when the query term is a prefix of
+  // the token.
+  // Ex. A query term "foo" will match indexed tokens like "foo", "foot", and
+  // "football".
+  optional TermMatchType.Code term_match_type = 2;
+
+  // TODO(cassiewang): add namespace restricts
+  // TODO(cassiewang): add schema type restricts
+}
+
+// Client-supplied specifications on what to include/how to format the search
+// results.
+// Next tag: 3
+message ResultSpecProto {
+  // The maximum number of documents to return in SearchResultProto. Even if
+  // more documents have matched the SearchSpecProto, this may be used to limit
+  // the number to actually return to the client.
+  optional int32 limit = 1 [default = 10];
+
+  // Whether to collect and return debug_info in the SearchResultProto.
+  optional bool debug_info = 2;
+}
+
+// Icing lib-supplied results from a search results.
+// Next tag: 4
+message SearchResultProto {
+  // Documents that match the SearchSpecProto. Empty if there was an error.
+  repeated DocumentProto documents = 1;
+
+  // Details on what errors were encountered. Not populated if there were no
+  // errors.
+  message ErrorProto {
+    // Generic category of errors.
+    enum Status {
+      UNKNOWN = 0;
+      // TODO(cassiewang): Add more as use-cases come up
+    }
+    optional Status status = 1;
+
+    // A more descriptive message on the error. Useful during debugging
+    optional string error_message = 2;
+  }
+  optional ErrorProto error = 2;
+
+  // Various debug fields. Not populated if ResultSpecProto.debug_info = false.
+  message DebugInfoProto {
+    // The number of results that actually matched the SearchSpecProto. This is
+    // different from the number of `documents` returned since the user can
+    // set a ResultSpecProto.limit on how many results are returned to them.
+    optional uint64 num_results = 1;
+
+    // Latency to parse and execute the query, in milliseconds.
+    optional uint64 latency_ms = 2;
+
+    // The internal representation of the actual query string that was executed.
+    // This may be different from the SearchSpecProto.query if the original
+    // query was malformed.
+    optional string executed_query = 3;
+  }
+  optional DebugInfoProto debug_info = 3;
+}
+
+// TODO(cassiewang): Add a ScoringSpec.

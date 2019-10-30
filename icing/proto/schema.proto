@@ -1,0 +1,176 @@
+// Copyright 2019 Google LLC
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//      http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+syntax = "proto2";
+
+package icing;
+
+import "icing/proto/term.proto";
+
+// Defines the schema that every Document of a specific "type" should adhere
+// to. These can be considered as definitions of rich structured types for
+// Documents accepted by IcingSearchEngine.
+//
+// NOTE: Instances of SchemaTypeConfigProto are strongly recommended to be
+// based on types defined in schema.org. This makes the data/config/code more
+// shareable and easier to extend in the future.
+//
+// TODO(cassiewang) Define a sample proto file that can be used by tests and for
+// documentation.
+//
+// Next tag: 5
+message SchemaTypeConfigProto {
+  // REQUIRED: Named type that uniquely identifies the structured, logical
+  // schema being defined.
+  //
+  // Recommended format: Human readable string that's one of the types defined
+  // in http://schema.org. Eg: DigitalDocument, Message, Person, etc.
+  optional string schema_type = 1;
+
+  // The time-to-live that should be enforced on every Document of this type.
+  // Documents get garbage-collected based on their creation-timestamp and the
+  // TTL of the schema they belong to.
+  //
+  // Default value of 0 keeps the Documents till they're explicitly deleted.
+  optional int64 ttl_secs = 3;
+
+  // List of all properties that are supported by Documents of this type.
+  // An Document should never have properties that are not listed here.
+  //
+  // TODO(cassiewang) Figure out if we should disallow, ignore or accept
+  // unknown properties. Accepting them could make switching between versions
+  // easier.
+  repeated PropertyConfigProto properties = 4;
+
+  reserved 2;
+}
+
+// Describes how a single property should be indexed.
+// Next tag: 3
+message IndexingConfig {
+  // Indicates how the content of this property should be matched in the index.
+  //
+  // TermMatchType.Code=UNKNOWN
+  // Content in this section will not be tokenized or indexed. Useful if the
+  // data type is not made up of terms (e.g. DOCUMENT or BYTES type). All the
+  // properties inside the nested property won't be indexed regardless of the
+  // value of the term_match_type field for the nested properties.
+  //
+  // TermMatchType.Code=EXACT_ONLY
+  // Content in this section should only be returned for queries matching the
+  // exact tokens appearing in this section.
+  // Ex. A section with "fool" should NOT match a query for "foo".
+  //
+  // TermMatchType.Code=PREFIX
+  // Content in this section should be returned for queries that are either
+  // exact matches or query matches of the tokens appearing in this section.
+  // Ex. A section with "fool" *should* match a query for "foo".
+  optional TermMatchType.Code term_match_type = 1;
+
+  message TokenizerType {
+    enum Code {
+      // It is only valid for tokenizer_type to be 'NONE' if either indexed is
+      // also 'NONE' or the data type is DOCUMENT.
+      NONE = 0;
+
+      // Tokenization for plain text.
+      PLAIN = 1;
+    }
+  }
+  optional TokenizerType.Code tokenizer_type = 2;
+}
+
+// Describes the schema of a single property of Documents that belong to a
+// specific SchemaTypeConfigProto. These can be considered as a rich, structured
+// type for each property of Documents accepted by IcingSearchEngine.
+// Next tag: 6
+message PropertyConfigProto {
+  // REQUIRED: Name that uniquely identifies a property within an Document of
+  // a specific SchemaTypeConfigProto.
+  //
+  // Recommended format: Human readable string that's one of the properties
+  // defined in schema.org for the parent SchemaTypeConfigProto.
+  // Eg: 'author' for http://schema.org/DigitalDocument.
+  // Eg: 'address' for http://schema.org/Place.
+  optional string property_name = 1;
+
+  // REQUIRED: Physical data-types of the contents of the property.
+  message DataType {
+    enum Code {
+      // This should never purposely be set. This is used for backwards
+      // compatibility reasons.
+      UNKNOWN = 0;
+      STRING = 1;
+      INT64 = 2;
+      DOUBLE = 3;
+      BOOLEAN = 4;
+
+      // Unstructured BLOB.
+      BYTES = 5;
+
+      // Indicates that the property itself is an Document, making it part
+      // a hierarchical Document schema. Any property using this data_type
+      // MUST have a valid 'schema_type'.
+      DOCUMENT = 6;
+    }
+  }
+  optional DataType.Code data_type = 2;
+
+  // REQUIRED if (data_type == DOCUMENT). OPTIONAL otherwise.
+  // Indicates the logical schema-type of the contents of this property.
+  //
+  // TODO(cassiewang): This could be useful for non-document properties, e.g.
+  // to set this field as a schema.org/address for some string property.
+  // Re-evaluate what recommendation we should give clients if we want to start
+  // using this for non-document properties as well.
+  //
+  // Recommended format: Human readable string that is one of the types defined
+  // in schema.org, matching the SchemaTypeConfigProto.schema_type of another
+  // type.
+  optional string schema_type = 3;
+
+  // REQUIRED: The cardinality of the property.
+  message Cardinality {
+    // NOTE: The order of the cardinality is purposefully set to be from least
+    // restrictive (REPEATED) to most restrictive (REQUIRED). This makes it
+    // easier to check if a field is backwards compatible by doing a simple
+    // greater-than/less-than check on the enum ints. Changing/adding new
+    // cardinalities should be done cautiously.
+    enum Code {
+      // This should never purposely be set. This is used for backwards
+      // compatibility reasons.
+      UNKNOWN = 0;
+
+      // Any number of items (including zero) [0...*].
+      REPEATED = 1;
+
+      // Zero or one value [0,1].
+      OPTIONAL = 2;
+
+      // Exactly one value [1].
+      REQUIRED = 3;
+    }
+  }
+  optional Cardinality.Code cardinality = 4;
+
+  // OPTIONAL: Properties that do not set the indexing config will not be
+  // indexed.
+  optional IndexingConfig indexing_config = 5;
+}
+
+// List of all supported types constitutes the schema used by Icing.
+// Next tag: 2
+message SchemaProto {
+  repeated SchemaTypeConfigProto types = 1;
+}
